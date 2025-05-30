@@ -43,6 +43,8 @@ class BatchProcessor:
             True if processing was successful, False otherwise
         """
         
+        # Normalize path for cross-platform compatibility
+        project_root = Path(project_root).resolve()
         aaa_folder = project_root / "AAA"
         
         if not aaa_folder.exists():
@@ -64,40 +66,56 @@ class BatchProcessor:
         if verbose:
             click.echo(f"Found {len(json_files)} JSON files in {aaa_folder}")
         
-        # Process each JSON file
-        results = []
+        # Get project name from the first file to create CSV
         project_name = None
+        try:
+            with open(json_files[0], 'r', encoding='utf-8') as f:
+                first_data = json.load(f)
+                project_name = first_data.get('projectName', 'Unknown')
+        except Exception:
+            project_name = 'Unknown'
         
-        for json_file in json_files:
+        # Create CSV file and write header
+        csv_filename = self._sanitize_filename(f"{project_name} AAAResults.csv")
+        csv_path = aaa_folder / csv_filename
+        
+        if not self._initialize_csv(csv_path, verbose):
+            return False
+        
+        # Process each JSON file and update CSV incrementally
+        processed_count = 0
+        total_files = len(json_files)
+        
+        for i, json_file in enumerate(json_files, 1):
             if verbose:
-                click.echo(f"Processing: {json_file.name}")
+                click.echo(f"Processing ({i}/{total_files}): {json_file.name}")
             
             try:
                 result = self._process_single_file(json_file, reasoning_effort, verbose)
                 if result:
-                    results.append(result)
-                    if not project_name:
-                        project_name = result.get('project', 'Unknown')
+                    # Immediately append to CSV
+                    if self._append_to_csv(result, csv_path, verbose):
+                        processed_count += 1
+                        if verbose:
+                            click.echo(f"  ✅ Added to CSV: {result['test_case_name']}")
+                    else:
+                        click.echo(f"  ❌ Failed to save result for {json_file.name}", err=True)
+                else:
+                    click.echo(f"  ⚠️ No result generated for {json_file.name}")
                         
             except Exception as e:
-                click.echo(f"Error processing {json_file.name}: {e}", err=True)
+                click.echo(f"  ❌ Error processing {json_file.name}: {e}", err=True)
                 continue
         
-        if not results:
-            click.echo("No results to save", err=True)
+        if processed_count == 0:
+            click.echo("No results were successfully processed", err=True)
             return False
         
-        # Save results to CSV
-        csv_filename = f"{project_name} AAA issue scan result.csv"
-        csv_path = aaa_folder / csv_filename
+        if verbose:
+            click.echo(f"\n📊 Results saved to: {csv_path}")
+            click.echo(f"📈 Processed {processed_count}/{total_files} test cases successfully")
         
-        success = self._save_to_csv(results, csv_path, verbose)
-        
-        if success and verbose:
-            click.echo(f"Results saved to: {csv_path}")
-            click.echo(f"Processed {len(results)} test cases successfully")
-        
-        return success
+        return True
     
     def _process_single_file(self, json_file: Path, reasoning_effort: str, verbose: bool) -> Optional[Dict[str, Any]]:
         """
@@ -229,9 +247,87 @@ class BatchProcessor:
         except Exception:
             return None
     
+    def _initialize_csv(self, csv_path: Path, verbose: bool) -> bool:
+        """
+        Initialize CSV file with headers
+        
+        Args:
+            csv_path: Path to save CSV file
+            verbose: Whether to output verbose information
+            
+        Returns:
+            True if successful, False otherwise
+        """
+        
+        try:
+            fieldnames = ['project', 'class_name', 'test_case_name', 'issue_type', 'sequence', 'focal_method', 'reasoning']
+            
+            # Ensure parent directory exists
+            csv_path.parent.mkdir(parents=True, exist_ok=True)
+            
+            # Create CSV file with header
+            with open(csv_path, 'w', newline='', encoding='utf-8-sig') as csvfile:
+                writer = csv.DictWriter(csvfile, fieldnames=fieldnames)
+                writer.writeheader()
+            
+            if verbose:
+                click.echo(f"📝 Created CSV file: {csv_path}")
+            
+            return True
+            
+        except Exception as e:
+            click.echo(f"Error creating CSV file: {e}", err=True)
+            return False
+    
+    def _append_to_csv(self, result: Dict[str, Any], csv_path: Path, verbose: bool) -> bool:
+        """
+        Append a single result to CSV file
+        
+        Args:
+            result: Result dictionary to append
+            csv_path: Path to CSV file
+            verbose: Whether to output verbose information
+            
+        Returns:
+            True if successful, False otherwise
+        """
+        
+        try:
+            fieldnames = ['project', 'class_name', 'test_case_name', 'issue_type', 'sequence', 'focal_method', 'reasoning']
+            
+            # Clean the result data
+            cleaned_result = {}
+            for key in fieldnames:
+                value = result.get(key, '')
+                if value is None:
+                    cleaned_result[key] = ''
+                elif isinstance(value, str):
+                    # Remove problematic characters that might cause CSV issues
+                    cleaned_result[key] = value.replace('\r\n', ' ').replace('\n', ' ').replace('\r', ' ').strip()
+                else:
+                    cleaned_result[key] = str(value)
+            
+            # Append to existing CSV file
+            with open(csv_path, 'a', newline='', encoding='utf-8-sig') as csvfile:
+                writer = csv.DictWriter(csvfile, fieldnames=fieldnames)
+                writer.writerow(cleaned_result)
+            
+            return True
+            
+        except PermissionError as e:
+            click.echo(f"Error: Permission denied when saving to {csv_path}", err=True)
+            click.echo("Please ensure the file is not open in another application", err=True)
+            if verbose:
+                click.echo(f"Details: {e}", err=True)
+            return False
+        except Exception as e:
+            if verbose:
+                click.echo(f"Error appending to CSV: {e}", err=True)
+            return False
+
     def _save_to_csv(self, results: List[Dict[str, Any]], csv_path: Path, verbose: bool) -> bool:
         """
-        Save results to CSV file
+        Save results to CSV file with Windows compatibility
         
         Args:
             results: List of result dictionaries
@@ -245,14 +341,83 @@ class BatchProcessor:
         try:
             fieldnames = ['project', 'class_name', 'test_case_name', 'issue_type', 'sequence', 'focal_method', 'reasoning']
             
-            with open(csv_path, 'w', newline='', encoding='utf-8') as csvfile:
+            # Ensure parent directory exists
+            csv_path.parent.mkdir(parents=True, exist_ok=True)
+            
+            # Use UTF-8 with BOM for better Windows Excel compatibility
+            with open(csv_path, 'w', newline='', encoding='utf-8-sig') as csvfile:
                 writer = csv.DictWriter(csvfile, fieldnames=fieldnames)
                 writer.writeheader()
-                writer.writerows(results)
+                
+                # Clean data before writing
+                for result in results:
+                    cleaned_result = {}
+                    for key, value in result.items():
+                        # Handle None values and clean strings
+                        if value is None:
+                            cleaned_result[key] = ''
+                        elif isinstance(value, str):
+                            # Remove problematic characters that might cause CSV issues
+                            cleaned_result[key] = value.replace('\r\n', ' ').replace('\n', ' ').replace('\r', ' ').strip()
+                        else:
+                            cleaned_result[key] = str(value)
+                    writer.writerow(cleaned_result)
             
             return True
             
+        except PermissionError as e:
+            click.echo(f"Error: Permission denied when saving to {csv_path}", err=True)
+            click.echo("Please ensure the file is not open in another application and you have write permissions", err=True)
+            if verbose:
+                click.echo(f"Details: {e}", err=True)
+            return False
+        except OSError as e:
+            click.echo(f"Error: Could not save file to {csv_path}", err=True)
+            click.echo("Please check the path is valid and accessible", err=True)
+            if verbose:
+                click.echo(f"Details: {e}", err=True)
+            return False
         except Exception as e:
             if verbose:
                 click.echo(f"Error saving CSV: {e}", err=True)
-            return False 
+            else:
+                click.echo(f"Error saving CSV file", err=True)
+            return False
+
+    def _sanitize_filename(self, filename: str) -> str:
+        """
+        Sanitize filename for Windows compatibility
+        
+        Args:
+            filename: Original filename
+            
+        Returns:
+            Sanitized filename safe for Windows
+        """
+        # Remove invalid Windows characters
+        filename = re.sub(r'[\\/:*?"<>|]', '', filename)
+        
+        # Remove leading/trailing spaces and dots
+        filename = filename.strip(' .')
+        
+        # Handle Windows reserved names
+        reserved_names = {
+            'CON', 'PRN', 'AUX', 'NUL',
+            'COM1', 'COM2', 'COM3', 'COM4', 'COM5', 'COM6', 'COM7', 'COM8', 'COM9',
+            'LPT1', 'LPT2', 'LPT3', 'LPT4', 'LPT5', 'LPT6', 'LPT7', 'LPT8', 'LPT9'
+        }
+        name_without_ext = filename.rsplit('.', 1)[0] if '.' in filename else filename
+        if name_without_ext.upper() in reserved_names:
+            filename = f"_{filename}"
+        
+        # Limit filename length (Windows has 255 char limit)
+        if len(filename) > 255:
+            name, ext = filename.rsplit('.', 1) if '.' in filename else (filename, '')
+            max_name_len = 255 - len(ext) - 1 if ext else 255
+            filename = f"{name[:max_name_len]}.{ext}" if ext else name[:255]
+        
+        # Ensure we have a valid filename
+        if not filename or filename in ('.', '..'):
+            filename = 'aaa_scan_result.csv'
+        
+        return filename 

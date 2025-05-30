@@ -115,6 +115,27 @@ your_project/
 
 **Output:** CSV file with columns: `project`, `class_name`, `test_case_name`, `issue_type`, `sequence`, `focal_method`, `reasoning`
 
+**Real-time Updates:** 
+- ✅ CSV file is created immediately when processing starts
+- ✅ Each test case result is added to CSV as soon as it's processed
+- ✅ Progress is visible in real-time with `--verbose` flag
+- ✅ If processing stops unexpectedly, already processed results are preserved
+
+**Example Output (with --verbose):**
+```bash
+📝 Created CSV file: /path/to/project/AAA/MyProject AAA issue scan result.csv
+Found 3 JSON files in /path/to/project/AAA
+Processing (1/3): test1.json
+  ✅ Added to CSV: testMethod1
+Processing (2/3): test2.json
+  ✅ Added to CSV: testMethod2
+Processing (3/3): test3.json
+  ✅ Added to CSV: testMethod3
+
+📊 Results saved to: /path/to/project/AAA/MyProject AAA issue scan result.csv
+📈 Processed 3/3 test cases successfully
+```
+
 ## AAA Issue Types
 
 | Issue Type | Description |
@@ -156,13 +177,17 @@ Options:
 ## Platform-Specific Notes
 
 ### Windows
-- Use `py` instead of `python` if needed
-- For PowerShell: `Set-ExecutionPolicy RemoteSigned -Scope CurrentUser`
-- Both Command Prompt and PowerShell supported
+- **Path Support**: Automatically handles Windows path separators and long paths
+- **File Names**: Automatically sanitizes CSV filenames for Windows compatibility  
+- **Excel Compatibility**: CSV files use UTF-8 with BOM for proper Excel display
+- **Commands**: Use `py` instead of `python` if needed
+- **PowerShell**: Run `Set-ExecutionPolicy RemoteSigned -Scope CurrentUser` if needed
+- **File Permissions**: Ensure CSV output files aren't open in Excel when running batch processing
 
 ### Python Requirements
 - Python 3.9 or higher
 - Works with virtual environments and conda
+- Automatically handles different line endings (LF, CRLF)
 
 ## Troubleshooting
 
@@ -174,6 +199,9 @@ Options:
 | `Module not found` | Run `pip install -e .` in project directory |
 | `Invalid API key` | Check key format (starts with `sk-` or `sk-proj-`) |
 | `AAA folder not found` | Ensure `AAA/` folder exists in project root |
+| `Permission denied` (Windows) | Close Excel/CSV files, run as Administrator |
+| `Path too long` (Windows) | Enable long path support in Windows settings |
+| `CSV garbled text` (Windows) | Tool uses UTF-8 with BOM automatically |
 
 **Get Help:**
 ```bash
