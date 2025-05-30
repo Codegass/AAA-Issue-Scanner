@@ -15,103 +15,272 @@ A command-line tool for detecting AAA (Arrange-Act-Assert) pattern issues in uni
 
 ## Installation
 
-Make sure you have Python 3.9 or higher installed, then run:
+### Prerequisites
+- **Python 3.9 or higher** - [Download Python](https://www.python.org/downloads/)
+- **Git** (optional) - [Download Git](https://git-scm.com/downloads)
 
+### Option 1: Quick Install (Recommended)
+
+#### On Windows:
+1. **Open Command Prompt or PowerShell as Administrator**
+2. **Install uv (Python package manager):**
+   ```cmd
+   # In Command Prompt
+   pip install uv
+   
+   # Or in PowerShell
+   pip install uv
+   ```
+3. **Clone and install the project:**
+   ```cmd
+   # Clone the repository
+   git clone https://github.com/your-username/AAA-Issue-Scanner.git
+   cd AAA-Issue-Scanner
+   
+   # Install with uv
+   uv pip install -e .
+   ```
+
+#### On macOS/Linux:
 ```bash
-# Clone the project
+# Install uv
+pip install uv
+
+# Clone and install
 git clone https://github.com/your-username/AAA-Issue-Scanner.git
 cd AAA-Issue-Scanner
-
-# Install the project (development mode)
 uv pip install -e .
 ```
 
-## Quick Start
+### Option 2: Alternative Install (Without uv)
 
-### 1. Set OpenAI API Key
+#### On Windows:
+```cmd
+# Clone the repository
+git clone https://github.com/your-username/AAA-Issue-Scanner.git
+cd AAA-Issue-Scanner
 
-The tool requires an OpenAI API key. You can get one from [OpenAI's platform](https://platform.openai.com/api-keys).
+# Create virtual environment
+python -m venv venv
 
-#### On Unix/Linux/macOS (Bash/Zsh):
-```bash
-export OPENAI_API_KEY='your-api-key-here'
+# Activate virtual environment
+# In Command Prompt:
+venv\Scripts\activate
+# In PowerShell:
+venv\Scripts\Activate.ps1
+
+# Install dependencies
+pip install -e .
 ```
 
-#### On Windows (Command Prompt):
+#### On macOS/Linux:
+```bash
+git clone https://github.com/your-username/AAA-Issue-Scanner.git
+cd AAA-Issue-Scanner
+python -m venv venv
+source venv/bin/activate
+pip install -e .
+```
+
+## Quick Start Guide
+
+### Step 1: Get Your OpenAI API Key
+
+1. Visit [OpenAI's platform](https://platform.openai.com/api-keys)
+2. Sign up or log in to your account
+3. Create a new API key
+4. Copy the key (it starts with `sk-` or `sk-proj-`)
+
+### Step 2: Set Up Your API Key
+
+Choose **ONE** of the following methods:
+
+#### Method A: Environment Variable (Recommended)
+
+**On Windows (Command Prompt):**
 ```cmd
 set OPENAI_API_KEY=your-api-key-here
 ```
 
-#### On Windows (PowerShell):
+**On Windows (PowerShell):**
 ```powershell
 $env:OPENAI_API_KEY='your-api-key-here'
 ```
 
-#### Alternative: Using the CLI parameter
+**On macOS/Linux:**
 ```bash
-aaa-scanner --api-key 'your-api-key-here' your-file.json
+export OPENAI_API_KEY='your-api-key-here'
 ```
 
-### 2. Run Analysis
+#### Method B: Use CLI Parameter
+Add `--api-key your-api-key-here` to any command.
 
-#### Single File Analysis (Backward Compatible)
-```bash
-# Analyze a single JSON file
-python -m aaa_issue_scanner example_test.json
+### Step 3: Test the Installation
 
-# Verbose mode
+Create a test JSON file or use the provided example:
+
+**On Windows:**
+```cmd
+# Test single file analysis
 python -m aaa_issue_scanner example_test.json --verbose
-
-# Save results to file
-python -m aaa_issue_scanner example_test.json --output results.txt
 ```
 
-#### Batch Processing (New!)
+**On macOS/Linux:**
 ```bash
-# Process all JSON files in project/AAA folder
-python -c "from src.aaa_issue_scanner.cli import cli; cli(['batch', 'project_root_path', '--verbose'])"
-
-# Or using the CLI script (if installed globally)
-aaa-scanner-cli batch project_root_path --verbose
+# Test single file analysis
+python -m aaa_issue_scanner example_test.json --verbose
 ```
 
-## Batch Processing
+If you see analysis results, congratulations! 🎉 The tool is working correctly.
 
-The tool supports batch processing for analyzing multiple test cases at once:
+## Usage
 
-### Project Structure Required
+### Single File Analysis
+
+**Windows Example:**
+```cmd
+# Basic analysis
+python -m aaa_issue_scanner my_test.json
+
+# Verbose output
+python -m aaa_issue_scanner my_test.json --verbose
+
+# Save to file
+python -m aaa_issue_scanner my_test.json --output results.txt
+
+# Use specific API key
+python -m aaa_issue_scanner my_test.json --api-key sk-your-key-here
+```
+
+**macOS/Linux Example:**
+```bash
+# Same commands work on Unix systems
+python -m aaa_issue_scanner my_test.json --verbose
+```
+
+### Batch Processing
+
+For analyzing multiple test cases at once:
+
+#### Step 1: Organize Your Files
+Create this folder structure:
 ```
 your_project/
-├── AAA/                    # Required folder name
-│   ├── test1.json         # Test case files
+├── AAA/                    # Must be named "AAA"
+│   ├── test1.json         # Your test case files
 │   ├── test2.json
 │   └── test3.json
-└── other_project_files...
+└── other_files...
 ```
 
-### Batch Processing Output
-The tool will:
-1. Process all `.json` files in the `AAA` folder
-2. Generate a CSV file named `{project_name} AAA issue scan result.csv`
-3. Save the CSV in the same `AAA` folder
+#### Step 2: Run Batch Analysis
 
-### CSV Columns
-| Column | Description |
-|--------|-------------|
-| project | Project name from JSON |
-| class_name | Test class name |
-| test_case_name | Test method name |
-| issue_type | AAA issue type (e.g., "Good AAA", "Multiple AAA") |
-| sequence | Pattern sequence found |
-| focal_method | Main method being tested |
-| reasoning | Detailed analysis explanation |
-
-### Example CSV Output
-```csv
-project,class_name,test_case_name,issue_type,sequence,focal_method,reasoning
-commons-cli,AbstractParserTestCase,testLongOptionQuoteHandling,Good AAA,Arrange → Act → Assert,CommandLineParser.parse,"The test sets up its input arguments (Arrange)..."
-commons-cli,BasicParserTest,testSimpleOption,Good AAA,Arrange → Act → Assert,CommandLineParser.parse,"The test sets up its preconditions..."
+**On Windows (Command Prompt):**
+```cmd
+python -c "from src.aaa_issue_scanner.cli import cli; cli(['batch', 'your_project', '--verbose'])"
 ```
+
+**On Windows (PowerShell):**
+```powershell
+python -c "from src.aaa_issue_scanner.cli import cli; cli(['batch', 'your_project', '--verbose'])"
+```
+
+**On macOS/Linux:**
+```bash
+python -c "from src.aaa_issue_scanner.cli import cli; cli(['batch', 'your_project', '--verbose'])"
+```
+
+#### Step 3: Check Results
+Look for the CSV file in `your_project/AAA/{project_name} AAA issue scan result.csv`
+
+## Windows-Specific Tips
+
+### PowerShell Execution Policy
+If you get execution policy errors in PowerShell:
+```powershell
+Set-ExecutionPolicy -ExecutionPolicy RemoteSigned -Scope CurrentUser
+```
+
+### Long Path Support
+For very long file paths on Windows 10/11:
+1. Open Group Policy Editor (`gpedit.msc`)
+2. Navigate to: Computer Configuration → Administrative Templates → System → Filesystem
+3. Enable "Enable Win32 long paths"
+
+### Alternative Python Commands
+If `python` doesn't work, try:
+```cmd
+py -m aaa_issue_scanner example_test.json
+# or
+python3 -m aaa_issue_scanner example_test.json
+```
+
+### Virtual Environment on Windows
+To avoid conflicts with other Python projects:
+```cmd
+# Create virtual environment
+python -m venv aaa_scanner_env
+
+# Activate it
+aaa_scanner_env\Scripts\activate
+
+# Install the scanner
+pip install -e .
+
+# When done, deactivate
+deactivate
+```
+
+## Troubleshooting
+
+### Common Issues
+
+#### "Python not found" on Windows
+1. Reinstall Python from [python.org](https://python.org)
+2. ✅ Check "Add Python to PATH" during installation
+3. Restart Command Prompt/PowerShell
+
+#### "Module not found" Error
+```cmd
+# Make sure you're in the right directory
+cd path\to\AAA-Issue-Scanner
+
+# Reinstall
+pip install -e .
+```
+
+#### API Key Issues
+1. **Invalid format**: Keys should start with `sk-` or `sk-proj-`
+2. **Not set**: Run `echo %OPENAI_API_KEY%` (Windows) or `echo $OPENAI_API_KEY` (Unix)
+3. **Expired**: Check your OpenAI account and regenerate the key
+
+#### "AAA folder not found"
+Make sure your project structure looks like:
+```
+project_root/
+├── AAA/           ← This folder must exist
+│   └── *.json     ← JSON files go here
+```
+
+### Getting Help
+
+If you're still having issues:
+
+1. **Check your Python version:**
+   ```cmd
+   python --version
+   ```
+   Should show 3.9 or higher.
+
+2. **Verify installation:**
+   ```cmd
+   python -m aaa_issue_scanner --help
+   ```
+
+3. **Test with verbose mode:**
+   ```cmd
+   python -m aaa_issue_scanner example_test.json --verbose
+   ```
 
 ## Input Format
 
@@ -146,9 +315,31 @@ The tool accepts JSON files containing the following fields:
 6. **Multiple Acts**: Multiple sequential actions
 7. **Suppressed Exception**: Exception suppression
 
-## Command Line Usage
+## Batch Processing Details
 
-### Single File Mode
+### CSV Output Columns
+| Column | Description |
+|--------|-------------|
+| project | Project name from JSON |
+| class_name | Test class name |
+| test_case_name | Test method name |
+| issue_type | AAA issue type (e.g., "Good AAA", "Multiple AAA") |
+| sequence | Pattern sequence found |
+| focal_method | Main method being tested |
+| reasoning | Detailed analysis explanation |
+
+### Example CSV Output
+```csv
+project,class_name,test_case_name,issue_type,sequence,focal_method,reasoning
+commons-cli,AbstractParserTestCase,testLongOptionQuoteHandling,Good AAA,Arrange → Act → Assert,CommandLineParser.parse,"The test sets up its input arguments (Arrange)..."
+commons-cli,BasicParserTest,testSimpleOption,Good AAA,Arrange → Act → Assert,CommandLineParser.parse,"The test sets up its preconditions..."
+```
+
+## Advanced Usage
+
+### Command Line Options
+
+#### Single File Mode
 ```bash
 python -m aaa_issue_scanner [OPTIONS] JSON_FILE
 
@@ -161,13 +352,9 @@ Options:
   --help                      Show this help message
 ```
 
-### Batch Processing Mode
+#### Batch Processing Mode
 ```bash
-# Using the CLI module
 python -c "from src.aaa_issue_scanner.cli import cli; cli(['batch', 'PROJECT_ROOT', '--verbose'])"
-
-# Using installed script
-aaa-scanner-cli batch PROJECT_ROOT [OPTIONS]
 
 Options:
   --api-key TEXT              OpenAI API key
@@ -175,52 +362,6 @@ Options:
   --reasoning-effort [low|medium|high]  Reasoning effort level [default: medium]
   -v, --verbose               Verbose output mode
   --help                      Show this help message
-```
-
-## Examples
-
-### Single File Analysis
-```bash
-python -m aaa_issue_scanner test_case.json --verbose
-```
-
-Output:
-```
-File loaded: test_case.json
-Test case: testLongOptionQuoteHandling
-Using model: o4-mini
-API key: sk-1234...xy90
-Calling OpenAI API...
-
-=== AAA Pattern Analysis Results ===
-<analysis>
-  <focal_method>testLongOptionQuoteHandling</focal_method>
-  <issueType>Good AAA</issueType>
-  <sequence>Arrange → Act → Assert</sequence>
-  <reasoning>
-    This test follows the correct AAA pattern...
-  </reasoning>
-</analysis>
-```
-
-### Batch Processing
-```bash
-python -c "from src.aaa_issue_scanner.cli import cli; cli(['batch', 'my_project', '--verbose'])"
-```
-
-Output:
-```
-Project root: my_project
-Using model: o4-mini
-API key: sk-proj...DvUA
-
-Found 3 JSON files in my_project/AAA
-Processing: test1.json
-Processing: test2.json
-Processing: test3.json
-Results saved to: my_project/AAA/commons-cli AAA issue scan result.csv
-Processed 3 test cases successfully
-Batch processing completed successfully! ✅
 ```
 
 ## Environment Variables
@@ -257,32 +398,6 @@ python -m aaa_issue_scanner example_test.json
 # Test batch processing (requires test_project/AAA/ with JSON files)
 python -c "from src.aaa_issue_scanner.cli import cli; cli(['batch', 'test_project', '--verbose'])"
 ```
-
-## Troubleshooting
-
-### API Key Issues
-
-If you encounter authentication errors:
-
-1. **Check your API key format**: OpenAI keys typically start with `sk-` or `sk-proj-`
-2. **Verify the key is valid**: Visit [OpenAI's platform](https://platform.openai.com/api-keys)
-3. **Check environment variable**: 
-   - Unix/Linux/macOS: `echo $OPENAI_API_KEY`
-   - Windows CMD: `echo %OPENAI_API_KEY%`
-   - Windows PowerShell: `echo $env:OPENAI_API_KEY`
-
-### Batch Processing Issues
-
-1. **"AAA folder not found"**: Ensure your project has an `AAA` folder in the root directory
-2. **"No JSON files found"**: Check that the `AAA` folder contains `.json` files
-3. **CSV generation fails**: Ensure write permissions to the `AAA` folder
-4. **Parsing errors**: Check that JSON files follow the expected format
-
-### Cross-Platform Notes
-
-- **File paths**: Use forward slashes `/` or let the tool handle path conversion
-- **Environment variables**: The tool automatically handles platform differences
-- **Line endings**: JSON files with any line ending format (LF, CRLF) are supported
 
 ## License
 
