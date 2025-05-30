@@ -8,6 +8,7 @@ import csv
 import json
 import re
 import xml.etree.ElementTree as ET
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
 from typing import Dict, List, Any, Optional
 import click
@@ -85,27 +86,34 @@ class BatchProcessor:
         # Process each JSON file and update CSV incrementally
         processed_count = 0
         total_files = len(json_files)
+        future_dict = dict()
         
-        for i, json_file in enumerate(json_files, 1):
-            if verbose:
-                click.echo(f"Processing ({i}/{total_files}): {json_file.name}")
+        with ThreadPoolExecutor() as executor:
+            for json_file in json_files:
+                future = executor.submit(self._process_single_file, json_file, reasoning_effort, verbose)
+                future_dict[future] = json_file.name
             
-            try:
-                result = self._process_single_file(json_file, reasoning_effort, verbose)
-                if result:
-                    # Immediately append to CSV
-                    if self._append_to_csv(result, csv_path, verbose):
-                        processed_count += 1
-                        if verbose:
-                            click.echo(f"  ✅ Added to CSV: {result['test_case_name']}")
+            for i, future in enumerate(as_completed(future_dict), 1):
+                json_file_name = future_dict[future]
+                if verbose:
+                    click.echo(f"Processing ({i}/{total_files}): {json_file_name}")
+                
+                try:
+                    result = future.result()
+                    if result:
+                        # Immediately append to CSV
+                        if self._append_to_csv(result, csv_path, verbose):
+                            processed_count += 1
+                            if verbose:
+                                click.echo(f"  ✅ Added to CSV: {result['test_case_name']}")
+                        else:
+                            click.echo(f"  ❌ Failed to save result for {json_file_name}", err=True)
                     else:
-                        click.echo(f"  ❌ Failed to save result for {json_file.name}", err=True)
-                else:
-                    click.echo(f"  ⚠️ No result generated for {json_file.name}")
-                        
-            except Exception as e:
-                click.echo(f"  ❌ Error processing {json_file.name}: {e}", err=True)
-                continue
+                        click.echo(f"  ⚠️ No result generated for {json_file_name}")
+                
+                except Exception as e:
+                    click.echo(f"  ❌ Error processing {json_file_name}: {e}", err=True)
+                    continue
         
         if processed_count == 0:
             click.echo("No results were successfully processed", err=True)
