@@ -1,0 +1,56 @@
+{
+  "parsedStatementsSequence": [
+    "NEW org.apache.commons.cli.Options()#[642-642]",
+    "org.apache.commons.cli.OptionBuilder.hasOptionalArgs(int)#[643-643]",
+    "org.apache.commons.cli.OptionBuilder.create(char)#[643-643]",
+    "org.apache.commons.cli.Options.addOption(Option)#[643-643]",
+    "org.apache.commons.cli.OptionBuilder.hasOptionalArgs()#[644-644]",
+    "org.apache.commons.cli.OptionBuilder.create(char)#[644-644]",
+    "org.apache.commons.cli.Options.addOption(Option)#[644-644]",
+    "NEW_JDK_CLASS java.util.Properties()#[648-648]",
+    "THIRD java.util.Properties.setProperty(String, String)#[649-649]",
+    "    org.apache.commons.cli.Parser.parse(Options, String[], Properties)#[49-49]",
+    "    org.apache.commons.cli.DefaultParser.parse(Options, String[], Properties)#[52-52]",
+    "    NEW_JDK_CLASS java.lang.UnsupportedOperationException(String)#[54-54]",
+    "TEST org.apache.commons.cli.AbstractParserTestCase.parse(CommandLineParser, Options, String[], Properties)#[651-651]",
+    "org.apache.commons.cli.CommandLine.hasOption(String)#[652-652]",
+    "ASSERT org.junit.jupiter.api.Assertions.assertTrue(boolean)#[652-652]",
+    "org.apache.commons.cli.CommandLine.getOptionValue(String)#[653-653]",
+    "ASSERT org.junit.jupiter.api.Assertions.assertEquals(Object, Object)#[653-653]",
+    "org.apache.commons.cli.CommandLine.hasOption(String)#[654-654]",
+    "ASSERT org.junit.jupiter.api.Assertions.assertTrue(boolean)#[654-654]",
+    "org.apache.commons.cli.CommandLine.getOptionValue(String)#[655-655]",
+    "ASSERT org.junit.jupiter.api.Assertions.assertEquals(Object, Object)#[655-655]",
+    "org.apache.commons.cli.CommandLine.hasOption(String)#[656-656]",
+    "ASSERT org.junit.jupiter.api.Assertions.assertFalse(boolean)#[656-656]"
+  ],
+  "productionFunctionImplementations": [
+    "/**\n     * The next Option can have the specified number of optional arguments.\n     *\n     * @param numArgs   the maximum number of optional arguments the next Option created can have.\n     * @return the OptionBuilder instance\n     */\n    public static OptionBuilder hasOptionalArgs(final int numArgs) {\n        argCount = numArgs;\n        optionalArg = true;\n        return INSTANCE;\n    }",
+    "/**\n     * Creates an Option using the current settings and with the specified Option {@code char}.\n     *\n     * @param opt the character representation of the Option\n     * @return the Option instance\n     * @throws IllegalArgumentException if {@code opt} is not a valid character. See Option.\n     */\n    public static Option create(final char opt) throws IllegalArgumentException {\n        return create(String.valueOf(opt));\n    }",
+    "/**\n     * Adds an option instance\n     *\n     * @param opt the option that is to be added\n     * @return the resulting Options instance\n     */\n    public Options addOption(final Option opt) {\n        final String key = opt.getKey();\n        // add it to the long option list\n        if (opt.hasLongOpt()) {\n            longOpts.put(opt.getLongOpt(), opt);\n        }\n        // if the option is required add it to the required list\n        if (opt.isRequired()) {\n            if (requiredOpts.contains(key)) {\n                requiredOpts.remove(requiredOpts.indexOf(key));\n            }\n            requiredOpts.add(key);\n        }\n        shortOpts.put(key, opt);\n        return this;\n    }"
+  ],
+  "testCaseSourceCode": "@Test\n    public void testPropertyOverrideValues() throws Exception {\n        final Options options = new Options();\n        options.addOption(OptionBuilder.hasOptionalArgs(2).create('i'));\n        options.addOption(OptionBuilder.hasOptionalArgs().create('j'));\n\n        final String[] args = { \"-j\", \"found\", \"-i\", \"ink\" };\n\n        final Properties properties = new Properties();\n        properties.setProperty(\"j\", \"seek\");\n\n        final CommandLine cmd = parse(parser, options, args, properties);\n        assertTrue(cmd.hasOption(\"j\"));\n        assertEquals(\"found\", cmd.getOptionValue(\"j\"));\n        assertTrue(cmd.hasOption(\"i\"));\n        assertEquals(\"ink\", cmd.getOptionValue(\"i\"));\n        assertFalse(cmd.hasOption(\"fake\"));\n    }",
+  "importedPackages": [
+    "org.junit.jupiter.api.Assertions.assertArrayEquals",
+    "org.junit.jupiter.api.Assertions.assertEquals",
+    "org.junit.jupiter.api.Assertions.assertFalse",
+    "org.junit.jupiter.api.Assertions.assertNotNull",
+    "org.junit.jupiter.api.Assertions.assertNull",
+    "org.junit.jupiter.api.Assertions.assertThrows",
+    "org.junit.jupiter.api.Assertions.assertTrue",
+    "java.util.Arrays",
+    "java.util.List",
+    "java.util.Properties",
+    "org.junit.jupiter.api.BeforeEach",
+    "org.junit.jupiter.api.Test"
+  ],
+  "testClassName": "org.apache.commons.cli.AbstractParserTestCase",
+  "testCaseName": "testPropertyOverrideValues",
+  "projectName": "commons-cli",
+  "beforeMethods": [
+    "@BeforeEach\n    public void setUp() {\n        //@formatter:off\n        options = new Options()\n            .addOption(\"a\", \"enable-a\", false, \"turn [a] on or off\")\n            .addOption(\"b\", \"bfile\", true, \"set the value of [b]\")\n            .addOption(\"c\", \"copt\", false, \"turn [c] on or off\");\n        //@formatter:on\n    }"
+  ],
+  "beforeAllMethods": [],
+  "afterMethods": [],
+  "afterAllMethods": []
+} 

@@ -1,0 +1,41 @@
+[project]
+name = "aaa-issue-scanner"
+version = "0.1.0"
+description = "A CLI tool for detecting AAA (Arrange-Act-Assert) pattern issues in unit tests"
+readme = "README.md"
+requires-python = ">=3.9"
+dependencies = [
+    "openai>=1.82.1",
+    "click>=8.1.0,<8.2.0",
+]
+authors = [
+    {name = "AAA Issue Scanner Team"}
+]
+keywords = ["testing", "aaa", "unit-test", "code-analysis"]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: Developers",
+    "License :: OSI Approved :: MIT License",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.9",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Topic :: Software Development :: Testing",
+]
+
+[project.scripts]
+aaa-scanner = "aaa_issue_scanner.cli:main"
+aaa-scanner-cli = "aaa_issue_scanner.cli:cli"
+
+[project.urls]
+Homepage = "https://github.com/your-username/AAA-Issue-Scanner"
+Repository = "https://github.com/your-username/AAA-Issue-Scanner"
+Issues = "https://github.com/your-username/AAA-Issue-Scanner/issues"
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/aaa_issue_scanner"]

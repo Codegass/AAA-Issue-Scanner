@@ -1,0 +1,29 @@
+{
+  "parsedStatementsSequence": [
+    "org.apache.commons.cli.CommandLineParser.parse(Options, String[])#[185-185]",
+    "org.apache.commons.cli.CommandLine.getOptionValue(String)#[186-186]",
+    "ASSERT org.junit.jupiter.api.Assertions.assertEquals(Object, Object, String)#[186-186]"
+  ],
+  "productionFunctionImplementations": [
+    "/**\n     * Parses the arguments according to the specified options.\n     *\n     * @param options the specified Options\n     * @param arguments the command line arguments\n     * @return the list of atomic option and value tokens\n     * @throws ParseException if there are any problems encountered while parsing the command line tokens.\n     */\n    CommandLine parse(Options options, String[] arguments) throws ParseException;",
+    "/**\n     * Gets the first argument, if any, of this option.\n     *\n     * @param optionName the name of the option.\n     * @return Value of the argument if option is set, and has an argument, otherwise null.\n     */\n    public String getOptionValue(final String optionName) {\n        return getOptionValue(resolveOption(optionName));\n    }"
+  ],
+  "testCaseSourceCode": "@Test\n    public void testLongOptionQuoteHandling() throws Exception {\n        final String[] args = { \"--bfile\", \"\\\"quoted string\\\"\" };\n        final CommandLine cl = parser.parse(options, args);\n        assertEquals(\"quoted string\", cl.getOptionValue(\"b\"), \"Confirm --bfile \\\"arg\\\" strips quotes\");\n    }",
+  "importedPackages": [
+    "org.junit.jupiter.api.Assertions.assertArrayEquals",
+    "org.junit.jupiter.api.Assertions.assertEquals",
+    "org.junit.jupiter.api.Assertions.assertFalse",
+    "org.junit.jupiter.api.Assertions.assertNotNull",
+    "org.junit.jupiter.api.Assertions.assertNull",
+    "org.junit.jupiter.api.Assertions.assertThrows",
+    "org.junit.jupiter.api.Assertions.assertTrue",
+    "java.util.Arrays",
+    "java.util.List",
+    "java.util.Properties",
+    "org.junit.jupiter.api.BeforeEach",
+    "org.junit.jupiter.api.Test"
+  ],
+  "testClassName": "org.apache.commons.cli.AbstractParserTestCase",
+  "testCaseName": "testLongOptionQuoteHandling",
+  "projectName": "commons-cli"
+} 
