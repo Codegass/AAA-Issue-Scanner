@@ -28,9 +28,46 @@ The correct AAA pattern follows this sequence: Arrange → Act → Assert
 These patterns may appear to deviate but are considered valid:
 
 1. **No Arrange for Static/Constructor**: When testing static methods or constructors, arrange section may be absent
+   Example:
+   ```java
+   @Test
+   public void testStaticMethod() {
+       int result = MathUtils.add(5, 3);  // Act
+       assertEquals(8, result);           // Assert
+   }
+   ```
 2. **Shared Before/After**: Arrange in @Before or Assert in @After methods
+   Example:
+   ``java
+   @Before
+   public void setup() {
+       database = new Database();  // Arrange in @Before
+   }
+   
+   @Test
+   public void testQuery() {
+       Result result = database.query("SELECT *");  // Act
+       assertNotNull(result);                       // Assert
+   }
+   ```
 3. **Expected Exception**: @Test(expected=Exception.class) serves as implicit assertion
+   Example:
+   ```java
+   @Test(expected = IllegalArgumentException.class)
+   public void testInvalidInput() {
+       calculator.divide(10, 0);  // Act (Assert is implicit via annotation)
+   }
+   ```
 4. **Implicit Act**: Assertion implicitly executes action (e.g., equals() method testing)
+   Example:
+   ```java
+   @Test
+   public void testEquals() {
+       Person p1 = new Person("John");     // Arrange
+       Person p2 = new Person("John");     // Arrange
+       assertEquals(p1, p2);               // Assert (implicitly calls p1.equals(p2))
+   }
+   ```
 
 ## AAA Issues to Detect
 
@@ -38,33 +75,165 @@ These patterns may appear to deviate but are considered valid:
 1. **Multiple AAA**: Test contains multiple <arrange,act,assert> sequences
    - Violates single responsibility principle
    - Each test should focus on one scenario
+    Example:
+    ```java
+    @Test
+    public void testMultipleScenarios() {
+        // First AAA sequence
+        Calculator calc = new Calculator();    // Arrange 1
+        int sum = calc.add(5, 3);             // Act 1
+        assertEquals(8, sum);                  // Assert 1
+        
+        // Second AAA sequence - VIOLATION
+        calc.clear();                          // Arrange 2
+        int product = calc.multiply(4, 2);     // Act 2
+        assertEquals(8, product);              // Assert 2
+    }
+    ```
+    Issue: Violates single responsibility principle. Should be split into testAdd() and testMultiply().
    
 2. **Missing Assert**: <arrange,act> without assertion
    - No verification of expected behavior
    - Test provides no explicit validation
+   Example:
+    ```java
+    @Test
+    public void testSaveUser() {
+        User user = new User("John");          // Arrange
+        userRepository.save(user);             // Act
+        // No assertion - VIOLATION
+    }
+    ```
+    Issue: No verification of expected behavior. Add assertions like `assertTrue(userRepository.contains(user))`.
 
 3. **Assert Pre-condition**: <arrange,assert,act,assert>
    - Asserts preconditions before actual action
    - Should use Assume.assumeXXX() instead
+   Example:
+    ```java
+    @Test
+    public void testUpdateUser() {
+        User user = userRepository.findById(1);     // Arrange
+        assertNotNull(user);                        // Assert precondition - VIOLATION
+        assertEquals("John", user.getName());       // Assert precondition - VIOLATION
+        
+        user.setName("Jane");                       // Act
+        userRepository.save(user);                  // Act
+        
+        assertEquals("Jane", user.getName());       // Assert
+    }
+    ```
+    Issue: Use `Assume.assumeNotNull(user)` instead of assertions for preconditions.
 
 ### Design Issues (Quality Problems):
 4. **Obscure Assert**: Complex assertion logic (cyclomatic complexity > 2)
    - Contains if/else, loops, try-catch in assertions
    - Consider Hamcrest matchers for cleaner assertions
+   Example:
+    ```java
+    @Test
+    public void testProcessData() {
+        DataProcessor processor = new DataProcessor();
+        List<Result> results = processor.process(data);    // Act
+        
+        // Obscure assertion with complex logic - VIOLATION
+        boolean found = false;
+        for (Result r : results) {
+            if (r.getType().equals("SUCCESS")) {
+                if (r.getValue() > 100) {
+                    found = true;
+                    break;
+                }
+            }
+        }
+        assertTrue(found);
+    }
+    ```
+    Issue: Use Hamcrest matchers: `assertThat(results, hasItem(allOf(hasProperty("type", "SUCCESS"), hasProperty("value", greaterThan(100)))))`.
 
 5. **Arrange & Quit**: <arrange,if(condition)return,act,assert>
    - Silent return if preconditions not met
    - Should use Assume API to skip tests properly
+   Example:
+    ```java
+    @Test
+    public void testDatabaseOperation() {
+        Connection conn = getConnection();          // Arrange
+        if (conn == null) {
+            return;  // VIOLATION - Silent quit
+        }
+        
+        Result result = conn.executeQuery("...");   // Act
+        assertNotNull(result);                      // Assert
+    }
+    ```
+    Issue: Use `Assume.assumeNotNull(conn)` to properly skip test when preconditions aren't met.
 
 6. **Multiple Acts**: <arrange,act1,act2,...,actn,assert>
    - Sequential dependent actions before assertion
    - Only final action's result is verified
    - Consider splitting into separate test cases
+   IMPORTANT: This is VERY RARE. Only identify as Multiple Acts when:
+        - Test name explicitly indicates testing multiple operations (e.g., testCreateAndUpdate, testLoginAndLogout)
+        - Each action depends on the previous action's result
+        - Only the final result is asserted
 
+    Valid Multiple Acts Example:
+    ```java
+    @Test
+    public void testCreateAndRetrieve() {  // Name indicates testing TWO operations
+        UserService service = new UserService();
+        
+        // First action
+        Long userId = service.createUser("John");    // Act 1: Create
+        
+        // Second action that depends on first
+        User user = service.getUser(userId);         // Act 2: Retrieve using result from Act 1
+        
+        // Only asserts final result
+        assertEquals("John", user.getName());        // Assert only the retrieve operation
+    }
+    ```
+
+    NOT Multiple Acts (just arrangement):
+    ```java
+    @Test
+    public void testGetUser() {  // Name indicates testing ONE operation
+        UserService service = new UserService();
+        
+        // These are arrangements, not acts
+        Long userId = service.createUser("John");    // Arrange - setup data
+        cache.clear();                               // Arrange - setup state
+        
+        // The actual act being tested
+        User user = service.getUser(userId);         // Act - the focal method
+        
+        assertEquals("John", user.getName());        // Assert
+    }
+    ```
+    Key Distinction: Without explicit naming intent (like testAandB), treat earlier method calls as arrangement for the focal method being tested.
+   
 7. **Suppressed Exception**: <arrange,try{act}catch{suppress},assert>
    - Catches and hides exceptions from action
    - Failures may go unnoticed
    - Should throw exceptions to expose failures
+   Example:
+    ```java
+    @Test
+    public void testFileOperation() {
+        FileHandler handler = new FileHandler();
+        
+        try {
+            handler.readFile("test.txt");    // Act
+        } catch (IOException e) {
+            // Suppressing exception - VIOLATION
+            e.printStackTrace();
+        }
+        
+        assertTrue(handler.isReady());       // Assert
+    }
+    ```
+    Issue: Exceptions should propagate. Add `throws IOException` to test method or use `assertThrows()`.
 
 ## Analysis Guidelines
 1. Most test cases should be "Good AAA" with no issues
@@ -72,6 +241,17 @@ These patterns may appear to deviate but are considered valid:
 3. Focus on the test's target method (focal method)
 4. Consider method names - they often indicate test intentions
 5. Check for proper exception handling and assertion completeness
+
+###Critical Analysis Guidelines for Multiple Acts
+
+1. Identify the Focal Method First: Determine what method/functionality the test is actually testing
+2. Check Test Name: Test names often reveal intentions (especially for Multiple Acts)
+3. Multiple Acts is RARE:
+    - Only when test name shows intent to test multiple operations (testAandB, testCreateAndUpdate)
+    - Otherwise, earlier method calls are just arrangement for the final focal method
+
+4. Examine Control Flow: Look for conditional logic, loops, and exception handling
+5. Verify Assertion Coverage: Ensure all important outcomes are verified
 
 ## Input Format
 <test_code>Unit test code</test_code>
