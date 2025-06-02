@@ -51,11 +51,16 @@ def cli(ctx):
     help='Output file path (defaults to console output)'
 )
 @click.option(
+    '--no-cost',
+    is_flag=True,
+    help='Disable cost and token usage information display'
+)
+@click.option(
     '--verbose', '-v',
     is_flag=True,
     help='Verbose output mode'
 )
-def single(json_file: Path, api_key: str, model: str, reasoning_effort: str, output: Path, verbose: bool):
+def single(json_file: Path, api_key: str, model: str, reasoning_effort: str, output: Path, no_cost: bool, verbose: bool):
     """
     Analyze a single test case JSON file to detect AAA pattern issues.
     
@@ -64,6 +69,9 @@ def single(json_file: Path, api_key: str, model: str, reasoning_effort: str, out
     
     if not _validate_api_key(api_key):
         return
+    
+    # Cost tracking is enabled by default
+    show_cost = not no_cost
     
     try:
         # Read JSON file
@@ -83,9 +91,22 @@ def single(json_file: Path, api_key: str, model: str, reasoning_effort: str, out
         if verbose:
             click.echo("Calling OpenAI API...")
         
-        # Call OpenAI API
+        # Call OpenAI API - always use cost-aware analysis
         analyzer = AAAAnalyzer(api_key, model)
-        result = analyzer.analyze(formatted_prompt, reasoning_effort)
+        result, usage, cost_info = analyzer.analyze_with_cost(formatted_prompt, reasoning_effort)
+        
+        # Show cost information (unless disabled)
+        if show_cost:
+            click.echo(f"\n💰 Cost Information:")
+            click.echo(f"   Input tokens: {usage.input_tokens:,}")
+            if usage.cached_tokens > 0:
+                click.echo(f"   Cached tokens: {usage.cached_tokens:,}")
+            click.echo(f"   Output tokens: {usage.completion_tokens:,}")
+            click.echo(f"   Total tokens: {usage.total_tokens:,}")
+            click.echo(f"   Total cost: ${cost_info.total_cost:.6f}")
+            if usage.cached_tokens > 0:
+                savings = (usage.cached_tokens * analyzer.cost_calculator.MODEL_PRICING[analyzer.cost_calculator._normalize_model_name(model)]["input"] / 1_000_000) - cost_info.cached_input_cost
+                click.echo(f"   Cache savings: ${savings:.6f}")
         
         # Output results
         if output:
@@ -95,6 +116,11 @@ def single(json_file: Path, api_key: str, model: str, reasoning_effort: str, out
         else:
             click.echo("\n=== AAA Pattern Analysis Results ===")
             click.echo(result)
+            
+        # Show cost summary (unless disabled)
+        if show_cost:
+            cost_summary = analyzer.get_cost_summary(verbose=True)
+            click.echo(cost_summary)
             
     except FileNotFoundError:
         click.echo(f"Error: File not found {json_file}", err=True)
@@ -125,11 +151,45 @@ def single(json_file: Path, api_key: str, model: str, reasoning_effort: str, out
     help='Reasoning effort level'
 )
 @click.option(
+    '--max-workers',
+    default=5,
+    type=int,
+    help='Maximum number of concurrent workers [default: 5]'
+)
+@click.option(
+    '--no-cache',
+    is_flag=True,
+    help='Disable caching (by default, caching is enabled to avoid reprocessing)'
+)
+@click.option(
+    '--restart',
+    is_flag=True,
+    help='Restart processing from beginning (ignore previous progress)'
+)
+@click.option(
+    '--cache-dir',
+    type=click.Path(path_type=Path),
+    help='Custom cache directory [default: .aaa_cache]'
+)
+@click.option(
+    '--requests-per-minute',
+    default=60,
+    type=int,
+    help='Rate limit for API requests per minute [default: 60]'
+)
+@click.option(
+    '--no-cost',
+    is_flag=True,
+    help='Disable cost and token usage information display'
+)
+@click.option(
     '--verbose', '-v',
     is_flag=True,
     help='Verbose output mode'
 )
-def batch(project_root: Path, api_key: str, model: str, reasoning_effort: str, verbose: bool):
+def batch(project_root: Path, api_key: str, model: str, reasoning_effort: str, 
+          max_workers: int, no_cache: bool, restart: bool, cache_dir: Path,
+          requests_per_minute: int, no_cost: bool, verbose: bool):
     """
     Batch process all JSON files in the AAA folder of a project.
     
@@ -139,21 +199,46 @@ def batch(project_root: Path, api_key: str, model: str, reasoning_effort: str, v
     if not _validate_api_key(api_key):
         return
     
+    # Cost tracking is enabled by default
+    show_cost = not no_cost
+    
+    # Auto-enable verbose mode if cost display is enabled (for better UX)
+    if show_cost:
+        verbose = True
+    
     if verbose:
         click.echo(f"Project root: {project_root}")
         click.echo(f"Using model: {model}")
+        click.echo(f"Max workers: {max_workers}")
+        click.echo(f"Cache enabled: {not no_cache}")
+        click.echo(f"Restart mode: {restart}")
+        click.echo(f"Rate limit: {requests_per_minute} req/min")
+        click.echo(f"Cost tracking: {'enabled' if show_cost else 'disabled'}")
         click.echo(f"API key: {api_key[:7]}...{api_key[-4:] if len(api_key) > 11 else '***'}")
         click.echo("")
     
     try:
-        # Create batch processor
-        processor = BatchProcessor(api_key, model)
+        # Create batch processor with new options
+        processor = BatchProcessor(
+            api_key=api_key, 
+            model=model,
+            max_workers=max_workers,
+            use_cache=not no_cache,
+            cache_dir=cache_dir,
+            requests_per_minute=requests_per_minute
+        )
         
-        # Process the project
-        success = processor.process_project(project_root, reasoning_effort, verbose)
+        # Process the project (cost tracking is always enabled in batch processor)
+        success = processor.process_project(project_root, reasoning_effort, verbose, restart)
         
         if success:
             click.echo("Batch processing completed successfully! ✅")
+            
+            # Show cost summary (unless disabled)
+            if show_cost:
+                click.echo("\n" + "="*50)
+                cost_summary = processor.analyzer.get_cost_summary(verbose=True)
+                click.echo(cost_summary)
         else:
             click.echo("Batch processing completed with errors ❌", err=True)
             sys.exit(1)
@@ -187,11 +272,16 @@ def batch(project_root: Path, api_key: str, model: str, reasoning_effort: str, v
     help='Output file path (defaults to console output)'
 )
 @click.option(
+    '--no-cost',
+    is_flag=True,
+    help='Disable cost and token usage information display'
+)
+@click.option(
     '--verbose', '-v',
     is_flag=True,
     help='Verbose output mode'
 )
-def main(json_file: Path, api_key: str, model: str, reasoning_effort: str, output: Path, verbose: bool):
+def main(json_file: Path, api_key: str, model: str, reasoning_effort: str, output: Path, no_cost: bool, verbose: bool):
     """
     Analyze test cases in JSON file to detect AAA pattern issues.
     
@@ -200,7 +290,7 @@ def main(json_file: Path, api_key: str, model: str, reasoning_effort: str, outpu
     # Call the single command function
     ctx = click.get_current_context()
     ctx.invoke(single, json_file=json_file, api_key=api_key, model=model, 
-               reasoning_effort=reasoning_effort, output=output, verbose=verbose)
+               reasoning_effort=reasoning_effort, output=output, no_cost=no_cost, verbose=verbose)
 
 
 def _validate_api_key(api_key: str) -> bool:

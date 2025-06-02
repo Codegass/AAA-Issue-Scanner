@@ -6,6 +6,7 @@ A command-line tool that uses OpenAI's o4-mini model to detect AAA (Arrange-Act-
 
 - 🔍 **Smart Detection**: Identifies 7 types of AAA pattern issues using AI
 - 📊 **Batch Processing**: Process multiple test cases and generate CSV reports
+- 💰 **Cost Tracking**: Track token usage and API costs with detailed breakdowns (enabled by default)
 - 🚀 **Easy to Use**: Simple command-line interface with cross-platform support
 - 📝 **Detailed Reports**: Provides analysis results and improvement suggestions
 
@@ -38,20 +39,26 @@ export OPENAI_API_KEY='your-openai-api-key'
 
 **Single file analysis:**
 ```bash
-# With uv
+# With uv (cost tracking enabled by default)
 uv run python -m aaa_issue_scanner single test.json --verbose
 
-# Traditional
+# Traditional (cost tracking enabled by default)
 python -m aaa_issue_scanner single test.json --verbose
+
+# Disable cost tracking if desired
+python -m aaa_issue_scanner single test.json --no-cost
 ```
 
 **Batch processing:**
 ```bash
-# With uv
-uv run python -m aaa_issue_scanner batch project_folder --verbose
+# With uv (cost tracking enabled by default)
+uv run python -m aaa_issue_scanner batch project_folder
 
-# Traditional  
-python -m aaa_issue_scanner batch project_folder --verbose
+# Traditional (cost tracking enabled by default)
+python -m aaa_issue_scanner batch project_folder
+
+# Disable cost tracking if desired  
+python -m aaa_issue_scanner batch project_folder --no-cost
 ```
 
 ## Installation Options
@@ -113,28 +120,190 @@ your_project/
 └── other_files...
 ```
 
+**Enhanced Features:**
+- ✅ **Multi-processing**: Concurrent processing with configurable workers
+- ✅ **Smart Caching**: Automatically enabled to avoid reprocessing identical test cases
+- ✅ **Smart Resume**: Automatically continues from where you left off (default behavior)
+- ✅ **Rate Limiting**: Respect API limits with configurable requests per minute
+- ✅ **Real-time Progress**: Live updates with detailed statistics
+
+**Configuration Options:**
+```bash
+# Basic usage (caching and resume enabled by default)
+python -m aaa_issue_scanner batch project_folder --verbose
+
+# Advanced usage with custom settings
+python -m aaa_issue_scanner batch project_folder \
+    --max-workers 8 \
+    --requests-per-minute 100 \
+    --cache-dir .my_cache \
+    --verbose
+
+# Disable caching if needed (rare case)
+python -m aaa_issue_scanner batch project_folder --no-cache --verbose
+
+# Force restart from beginning (ignores previous progress)
+python -m aaa_issue_scanner batch project_folder --restart --verbose
+```
+
+**Smart Caching (Default Enabled):**
+- 🧠 **Content-based hashing**: Only identical test cases are cached
+- 💾 **Persistent cache**: Survives between runs and projects
+- 🚀 **Instant results**: Cached cases return immediately (no API call)
+- 💰 **Cost savings**: Avoid redundant API charges for duplicate content
+- 📁 **Custom location**: Use `--cache-dir` for custom cache folder
+- ❌ **Override**: Use `--no-cache` only when you want fresh analysis for everything
+
+**Simple Workflow (All Defaults Work Great):**
+```bash
+# Run once - caching and resume automatically enabled
+python -m aaa_issue_scanner batch my_project --verbose
+
+# If interrupted, just re-run the same command
+python -m aaa_issue_scanner batch my_project --verbose
+# ✅ Automatically resumes from where it left off
+# ✅ Uses cache for any duplicate test cases
+# ✅ No additional flags needed!
+```
+
 **Output:** CSV file with columns: `project`, `class_name`, `test_case_name`, `issue_type`, `sequence`, `focal_method`, `reasoning`
 
-**Real-time Updates:** 
-- ✅ CSV file is created immediately when processing starts
-- ✅ Each test case result is added to CSV as soon as it's processed
-- ✅ Progress is visible in real-time with `--verbose` flag
-- ✅ If processing stops unexpectedly, already processed results are preserved
+## Cost Tracking & Token Usage
 
-**Example Output (with --verbose):**
+The tool provides comprehensive cost tracking for OpenAI API usage:
+
+### Supported Models & Pricing
+
+| Model | Input ($/M tokens) | Cached Input ($/M tokens) | Output ($/M tokens) |
+|-------|-------------------|---------------------------|-------------------|
+| **o4-mini** | $1.10 | $0.275 | $4.40 |
+| **gpt-4.1** | $2.00 | $0.50 | $8.00 |
+| **gpt-4.1-mini** | $0.40 | $0.10 | $1.60 |
+
+### Usage Examples
+
+**Single file with cost tracking (default behavior):**
 ```bash
-📝 Created CSV file: /path/to/project/AAA/MyProject AAA issue scan result.csv
-Found 3 JSON files in /path/to/project/AAA
-Processing (1/3): test1.json
-  ✅ Added to CSV: testMethod1
-Processing (2/3): test2.json
-  ✅ Added to CSV: testMethod2
-Processing (3/3): test3.json
-  ✅ Added to CSV: testMethod3
-
-📊 Results saved to: /path/to/project/AAA/MyProject AAA issue scan result.csv
-📈 Processed 3/3 test cases successfully
+python -m aaa_issue_scanner single test.json
 ```
+Output includes:
+```
+💰 Cost Information:
+   Input tokens: 1,127
+   Output tokens: 764
+   Total tokens: 1,891
+   Total cost: $0.004601
+```
+
+**Batch processing with cost tracking (default behavior):**
+```bash
+python -m aaa_issue_scanner batch project_folder
+```
+Shows per-file costs and final summary:
+```
+💰 Cost Summary:
+   Total API calls: 5
+   Total tokens: 8,450
+   - Input tokens: 5,635
+   - Cached tokens: 1,024
+   - Output tokens: 2,815
+   
+   Cost breakdown:
+   - Input cost: $0.006199
+   - Cached input cost: $0.000282
+   - Output cost: $0.012386
+   - Total cost: $0.018867
+   - Cache savings: $0.000845
+```
+
+**Disable cost tracking if needed:**
+```bash
+python -m aaa_issue_scanner single test.json --no-cost
+python -m aaa_issue_scanner batch project_folder --no-cost
+```
+
+### Cost Optimization Features
+
+- **Smart Caching**: Identical test cases are cached, avoiding duplicate API calls
+- **Cache Savings**: Shows how much money was saved through caching
+- **Real-time Tracking**: See costs accumulate during batch processing
+- **Model Flexibility**: Easily switch between models to optimize cost vs. quality
+
+## Project Log Recording
+
+The tool automatically maintains detailed project logs for tracking analysis history:
+
+### Log File Format
+
+Each project generates a `<project-name>-log.json` file in the project root with:
+
+```json
+{
+  "projectName": "commons-cli",
+  "tasks": [
+    {
+      "taskName": "AAA-Pattern-Analysis",
+      "model": "o4-mini",
+      "timestamp": "2025-06-02T02:31:49.621123",
+      "totalTestCases": 2,
+      "processedTestCases": 2,
+      "failedTestCases": 0,
+      "cacheHits": 2,
+      "apiCalls": 0,
+      "tokenUsage": {
+        "totalTokens": 0,
+        "inputTokens": 0,
+        "cachedTokens": 0,
+        "outputTokens": 0,
+        "avgTokensPerCall": 0
+      },
+      "costInfo": {
+        "totalCost": 0.0,
+        "inputCost": 0.0,
+        "cachedInputCost": 0.0,
+        "outputCost": 0.0,
+        "cacheSavings": 0.0
+      },
+      "status": "COMPLETED"
+    }
+  ],
+  "lastUpdated": "2025-06-02T02:31:49.621123"
+}
+```
+
+### Log Features
+
+- **Automatic Creation**: Creates or updates existing log files
+- **Multi-Task Support**: Preserves other task entries (e.g., ParseTestCaseToLlmContext)
+- **Complete Metrics**: Records test counts, success/failure rates, and cost details
+- **Model Tracking**: Shows which AI model was used for analysis
+- **Status Tracking**: `COMPLETED`, `COMPLETED_WITH_ERRORS`, or `IN_PROGRESS`
+- **Historical Data**: Maintains analysis history across multiple runs
+
+### 🚀 Interruption Recovery & Cost Tracking
+
+**Smart Interruption Handling:**
+- ✅ **Incremental Logging**: Updates project log every 3 processed files (not just at the end)
+- ✅ **Cost Preservation**: Token usage and costs are saved even if the process is interrupted
+- ✅ **Resume with Cost Accumulation**: When resuming, previous costs are loaded and accumulated
+- ✅ **No Cost Loss**: Your API spending is tracked accurately across interruptions
+
+**How it Works:**
+```bash
+# Start processing
+python -m aaa_issue_scanner batch project_folder --verbose
+
+# If interrupted (Ctrl+C, system crash, etc.), costs are already saved
+# Resume processing - costs from previous session are automatically loaded
+python -m aaa_issue_scanner batch project_folder --verbose
+# Shows: "💾 Loaded previous session: X API calls, $Y.ZZ cost"
+```
+
+**Progress Tracking:**
+- 📋 **Progress Files**: `.aaa_progress.json` tracks which files are completed
+- 📝 **Project Logs**: `<project-name>-log.json` preserves cost and token information
+- 🔄 **Smart Resume**: Skips processed files and accumulates previous costs
+- 💾 **Frequent Saves**: Progress and costs updated every 3 files (prevents data loss)
 
 ## AAA Issue Types
 
@@ -160,6 +329,7 @@ Options:
   --model TEXT                      Model to use [default: o4-mini] 
   --reasoning-effort [low|medium|high]  Reasoning level [default: medium]
   -o, --output PATH                 Output file
+  --no-cost                         Disable cost and token usage information
   -v, --verbose                     Verbose mode
 ```
 
@@ -170,7 +340,13 @@ python -m aaa_issue_scanner batch [OPTIONS] PROJECT_ROOT
 Options:
   --api-key TEXT                    OpenAI API key
   --model TEXT                      Model to use [default: o4-mini]
-  --reasoning-effort [low|medium|high]  Reasoning level [default: medium]  
+  --reasoning-effort [low|medium|high]  Reasoning level [default: medium]
+  --max-workers INTEGER             Maximum concurrent workers [default: 5]
+  --no-cache                        Disable caching (caching enabled by default)
+  --restart                         Restart from beginning (ignore previous progress)  
+  --cache-dir PATH                  Custom cache directory [default: .aaa_cache]
+  --requests-per-minute INTEGER     Rate limit for API requests [default: 60]
+  --no-cost                         Disable cost and token usage information
   -v, --verbose                     Verbose mode
 ```
 

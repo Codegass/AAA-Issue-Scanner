@@ -4,9 +4,12 @@ AAA Pattern Analyzer
 Uses OpenAI API to analyze AAA pattern issues in test cases.
 """
 
-from typing import Optional
+from typing import Optional, Tuple
 
 from openai import OpenAI
+from openai.types.chat import ChatCompletion
+
+from .cost_calculator import CostCalculator, TokenUsage, CostInfo
 
 
 class AAAAnalyzer:
@@ -104,6 +107,7 @@ Remember: Prioritize identifying the focal method being tested and assess whethe
         """
         self.client = OpenAI(api_key=api_key)
         self.model = model
+        self.cost_calculator = CostCalculator()
     
     def analyze(self, formatted_test_case: str, reasoning_effort: str = "medium") -> str:
         """
@@ -118,17 +122,93 @@ Remember: Prioritize identifying the focal method being tested and assess whethe
         """
         
         try:
-            response = self.client.chat.completions.create(
-                model=self.model,
-                messages=[
+            # Prepare the basic request parameters
+            request_params = {
+                "model": self.model,
+                "messages": [
                     {"role": "system", "content": self.SYSTEM_PROMPT},
                     {"role": "user", "content": formatted_test_case}
                 ],
-                response_format={"type": "text"},
-                reasoning_effort=reasoning_effort
-            )
+                "response_format": {"type": "text"}
+            }
+            
+            # Only add reasoning_effort for models that support it (o1 series)
+            if self._model_supports_reasoning_effort():
+                request_params["reasoning_effort"] = reasoning_effort
+            
+            response = self.client.chat.completions.create(**request_params)
+            
+            # Extract and track token usage
+            usage = self.cost_calculator.extract_token_usage(response)
+            cost = self.cost_calculator.calculate_cost(usage, self.model)
+            self.cost_calculator.add_usage(usage, cost)
             
             return response.choices[0].message.content
             
         except Exception as e:
-            raise Exception(f"OpenAI API call failed: {e}") 
+            raise Exception(f"OpenAI API call failed: {e}")
+    
+    def analyze_with_cost(self, formatted_test_case: str, reasoning_effort: str = "medium") -> Tuple[str, TokenUsage, CostInfo]:
+        """
+        Analyze AAA pattern of test case and return cost information
+        
+        Args:
+            formatted_test_case: Formatted test case
+            reasoning_effort: Reasoning effort level
+            
+        Returns:
+            Tuple of (analysis_result, token_usage, cost_info)
+        """
+        
+        try:
+            # Prepare the basic request parameters
+            request_params = {
+                "model": self.model,
+                "messages": [
+                    {"role": "system", "content": self.SYSTEM_PROMPT},
+                    {"role": "user", "content": formatted_test_case}
+                ],
+                "response_format": {"type": "text"}
+            }
+            
+            # Only add reasoning_effort for models that support it (o1 series)
+            if self._model_supports_reasoning_effort():
+                request_params["reasoning_effort"] = reasoning_effort
+            
+            response = self.client.chat.completions.create(**request_params)
+            
+            # Extract token usage and cost information
+            usage = self.cost_calculator.extract_token_usage(response)
+            cost = self.cost_calculator.calculate_cost(usage, self.model)
+            self.cost_calculator.add_usage(usage, cost)
+            
+            return response.choices[0].message.content, usage, cost
+            
+        except Exception as e:
+            raise Exception(f"OpenAI API call failed: {e}")
+    
+    def _model_supports_reasoning_effort(self) -> bool:
+        """Check if the model supports reasoning_effort parameter"""
+        model_lower = self.model.lower()
+        return any(pattern in model_lower for pattern in ["o1", "o4", "o3"])
+    
+    def get_cost_summary(self, verbose: bool = False) -> str:
+        """
+        Get formatted cost summary
+        
+        Args:
+            verbose: Whether to show detailed breakdown
+            
+        Returns:
+            Formatted cost summary string
+        """
+        return self.cost_calculator.format_cost_summary(verbose)
+    
+    def get_cost_data(self) -> dict:
+        """
+        Get raw cost and usage data
+        
+        Returns:
+            Dictionary with cost and usage information
+        """
+        return self.cost_calculator.get_summary() 
