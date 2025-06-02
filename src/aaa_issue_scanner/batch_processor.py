@@ -50,7 +50,7 @@ class BatchProcessor:
         if cache_dir:
             self.cache_dir = Path(cache_dir)
         else:
-            self.cache_dir = Path.cwd() / ".aaa_cache"
+            self.cache_dir = Path.cwd().joinpath(".aaa_cache")
         
         if self.use_cache:
             self.cache_dir.mkdir(exist_ok=True)
@@ -86,7 +86,10 @@ class BatchProcessor:
         
         # Normalize path for cross-platform compatibility
         project_root = Path(project_root).resolve()
-        aaa_folder = project_root / "AAA"
+        aaa_folder = project_root.joinpath("AAA")
+        
+        # Ensure AAA folder path is also resolved for Windows compatibility
+        aaa_folder = aaa_folder.resolve()
         
         if not aaa_folder.exists():
             click.echo(f"Error: AAA folder not found in {project_root}", err=True)
@@ -100,8 +103,8 @@ class BatchProcessor:
         # Find all JSON files
         json_files = list(aaa_folder.glob("*.json"))
         
-        # Filter out hidden files and progress files
-        json_files = [f for f in json_files if not f.name.startswith('.') and not f.name.endswith('-progress.json')]
+        # Filter out hidden files, progress files, and log files
+        json_files = [f for f in json_files if not f.name.startswith('.') and not f.name.endswith('-progress.json') and not f.name.endswith('-log.json')]
         
         if not json_files:
             click.echo(f"Warning: No JSON files found in {aaa_folder}")
@@ -124,7 +127,7 @@ class BatchProcessor:
             # Clear previous progress
             self._processed_files = set()
             self._failed_files = set()
-            progress_file = project_root / "AAA" / ".aaa_progress.json"
+            progress_file = aaa_folder.joinpath(".aaa_progress.json")
             if progress_file.exists():
                 progress_file.unlink()  # Delete progress file
             if verbose:
@@ -163,7 +166,7 @@ class BatchProcessor:
         
         # Create CSV file and write header
         csv_filename = self._sanitize_filename(f"{project_name} AAAResults.csv")
-        csv_path = aaa_folder / csv_filename
+        csv_path = aaa_folder.joinpath(csv_filename)
         
         # Initialize CSV (create new or append based on restart mode)
         if restart or not csv_path.exists():
@@ -665,7 +668,7 @@ class BatchProcessor:
 
     def _load_cache(self):
         """Load cache from disk"""
-        self.cache_file = self.cache_dir / "analysis_cache.json"
+        self.cache_file = self.cache_dir.joinpath("analysis_cache.json")
         self.cache = {}
         
         if self.cache_file.exists():
@@ -738,7 +741,8 @@ class BatchProcessor:
 
     def _load_progress(self, project_root: Path) -> Dict[str, Any]:
         """Load progress from previous run"""
-        progress_file = project_root / "AAA" / ".aaa_progress.json"
+        aaa_folder = project_root.joinpath("AAA")
+        progress_file = aaa_folder.joinpath(".aaa_progress.json")
         
         if progress_file.exists():
             try:
@@ -751,7 +755,8 @@ class BatchProcessor:
     
     def _save_progress(self, project_root: Path, processed: List[str], failed: List[str]):
         """Save current progress"""
-        progress_file = project_root / "AAA" / ".aaa_progress.json"
+        aaa_folder = project_root.joinpath("AAA")
+        progress_file = aaa_folder.joinpath(".aaa_progress.json")
         
         try:
             with open(progress_file, 'w', encoding='utf-8') as f:
@@ -775,11 +780,11 @@ class BatchProcessor:
         try:
             # Determine project name and log file path
             project_name = "unknown-project"
-            aaa_folder = project_root / "AAA"
+            aaa_folder = project_root.joinpath("AAA")
             
             if aaa_folder.exists():
                 json_files = list(aaa_folder.glob("*.json"))
-                json_files = [f for f in json_files if not f.name.startswith('.') and not f.name.endswith('-progress.json')]
+                json_files = [f for f in json_files if not f.name.startswith('.') and not f.name.endswith('-progress.json') and not f.name.endswith('-log.json')]
                 if json_files:
                     try:
                         with open(json_files[0], 'r', encoding='utf-8') as f:
@@ -793,7 +798,7 @@ class BatchProcessor:
                 project_name = project_root.name
             
             log_filename = f"{project_name}-log.json"
-            log_path = project_root / log_filename
+            log_path = aaa_folder.joinpath(log_filename)
             
             if not log_path.exists():
                 return  # No previous log to load from
@@ -801,6 +806,11 @@ class BatchProcessor:
             # Load existing log
             with open(log_path, 'r', encoding='utf-8') as f:
                 log_data = json.load(f)
+            
+            # Handle legacy log format
+            if "taskName" in log_data and "tasks" not in log_data:
+                # Old format - no AAA analysis task exists yet
+                return
             
             # Find the most recent AAA analysis task
             aaa_task = None
@@ -873,11 +883,11 @@ class BatchProcessor:
         try:
             # Determine project name from first JSON file or use directory name
             project_name = "unknown-project"
-            aaa_folder = project_root / "AAA"
+            aaa_folder = project_root.joinpath("AAA")
             
             if aaa_folder.exists():
                 json_files = list(aaa_folder.glob("*.json"))
-                json_files = [f for f in json_files if not f.name.startswith('.') and not f.name.endswith('-progress.json')]
+                json_files = [f for f in json_files if not f.name.startswith('.') and not f.name.endswith('-progress.json') and not f.name.endswith('-log.json')]
                 if json_files:
                     try:
                         with open(json_files[0], 'r', encoding='utf-8') as f:
@@ -890,9 +900,9 @@ class BatchProcessor:
             else:
                 project_name = project_root.name
             
-            # Construct log file path
+            # Construct log file path - put it in AAA folder
             log_filename = f"{project_name}-log.json"
-            log_path = project_root / log_filename
+            log_path = aaa_folder.joinpath(log_filename)
             
             # Load existing log or create new one
             log_data = {}
@@ -900,6 +910,36 @@ class BatchProcessor:
                 try:
                     with open(log_path, 'r', encoding='utf-8') as f:
                         log_data = json.load(f)
+                        
+                    # Handle legacy log format conversion
+                    if "taskName" in log_data and "tasks" not in log_data:
+                        # Convert old single-task format to new multi-task format
+                        old_task = {
+                            "taskName": log_data.get("taskName"),
+                            "startTime": log_data.get("startTime"),
+                            "endTime": log_data.get("endTime"),
+                            "durationMs": log_data.get("durationMs"),
+                            "totalTestCases": log_data.get("totalTestCases"),
+                            "processedTestCases": log_data.get("processedTestCases"),
+                            "unresolvedInvocationCount": log_data.get("unresolvedInvocationCount"),
+                            "unresolvedCases": log_data.get("unresolvedCases", []),
+                            "status": log_data.get("status")
+                        }
+                        
+                        # Create new format with tasks array
+                        log_data = {
+                            "projectName": log_data.get("projectName", project_name),
+                            "tasks": [old_task],
+                            "lastUpdated": datetime.now().isoformat()
+                        }
+                        
+                        # Save converted format immediately
+                        with open(log_path, 'w', encoding='utf-8') as f:
+                            json.dump(log_data, f, indent=2, ensure_ascii=False)
+                        
+                        if not incremental:
+                            click.echo(f"📋 Converted legacy log format to new format")
+                        
                 except Exception:
                     # If file is corrupted, start fresh
                     log_data = {}

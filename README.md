@@ -261,7 +261,7 @@ The tool automatically maintains detailed project logs for tracking analysis his
 
 ### Log File Format
 
-Each project generates a `<project-name>-log.json` file in the project root with:
+Each project generates a `<project-name>-log.json` file in the **AAA folder** with:
 
 ```json
 {
@@ -296,6 +296,13 @@ Each project generates a `<project-name>-log.json` file in the project root with
   "lastUpdated": "2025-06-02T02:31:49.621123"
 }
 ```
+
+### Log File Location
+
+- **Path**: `<project-root>/AAA/<project-name>-log.json`
+- **Example**: `my-project/AAA/my-project-log.json`
+- **Automatic**: Creates or updates existing log files in the AAA folder
+- **Multi-Project**: Each project maintains its own separate log file
 
 ### Log Features
 
@@ -382,6 +389,7 @@ Options:
 - **Path Support**: Automatically handles Windows path separators and long paths
 - **File Names**: Automatically sanitizes CSV filenames for Windows compatibility  
 - **Excel Compatibility**: CSV files use UTF-8 with BOM for proper Excel display
+- **Cross-Platform Paths**: Uses `pathlib.Path` for full Windows/Unix path compatibility
 - **Commands**: Use `py` instead of `python` if needed
 - **PowerShell**: Run `Set-ExecutionPolicy RemoteSigned -Scope CurrentUser` if needed
 - **File Permissions**: Ensure CSV output files aren't open in Excel when running batch processing
