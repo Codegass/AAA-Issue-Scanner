@@ -60,6 +60,9 @@ class BatchProcessor:
         self._last_request_time = 0
         self._request_lock = threading.Lock()
         
+        # Cache thread safety
+        self._cache_lock = threading.Lock()
+        
         # Progress tracking
         self._processed_files = set()
         self._failed_files = set()
@@ -175,53 +178,125 @@ class BatchProcessor:
         cache_hits = 0
         api_calls = 0
         
-        for i, json_file in enumerate(json_files, 1):
+        # Use ThreadPoolExecutor for concurrent processing
+        if self.max_workers > 1 and len(json_files) > 1:
+            # Multi-threaded processing
             if verbose:
-                click.echo(f"Processing ({i}/{len(json_files)}): {json_file.name}")
+                click.echo(f"🚀 Using {self.max_workers} workers for concurrent processing")
             
-            try:
-                result = self._process_single_file(json_file, reasoning_effort, verbose)
-                if result:
-                    # Check if this was a cache hit
-                    if result.get('_cache_hit'):
-                        cache_hits += 1
-                        if verbose:
-                            click.echo(f"  💾 Cache hit: {result['test_case_name']}")
-                    else:
-                        api_calls += 1
-                        if verbose:
-                            # Show per-call cost info in verbose mode
-                            call_cost = result.get('_cost_info')
-                            usage_info = result.get('_usage_info')
-                            if call_cost and usage_info:
-                                click.echo(f"  💰 Cost: ${call_cost.total_cost:.6f} ({usage_info.input_tokens} in, {usage_info.completion_tokens} out)")
+            with concurrent.futures.ThreadPoolExecutor(max_workers=self.max_workers) as executor:
+                # Submit all tasks
+                future_to_file = {
+                    executor.submit(self._process_single_file, json_file, reasoning_effort, verbose): json_file 
+                    for json_file in json_files
+                }
+                
+                # Process completed tasks as they finish
+                completed_count = 0
+                for future in concurrent.futures.as_completed(future_to_file):
+                    json_file = future_to_file[future]
+                    completed_count += 1
                     
-                    # Immediately append to CSV
-                    if self._append_to_csv(result, csv_path, verbose):
-                        processed_count += 1
-                        self._processed_files.add(json_file.name)
-                        if verbose and not result.get('_cache_hit'):
-                            click.echo(f"  ✅ Added to CSV: {result['test_case_name']}")
-                    else:
-                        click.echo(f"  ❌ Failed to save result for {json_file.name}", err=True)
+                    if verbose:
+                        click.echo(f"Processing ({completed_count}/{len(json_files)}): {json_file.name}")
+                    
+                    try:
+                        result = future.result()
+                        if result:
+                            # Check if this was a cache hit
+                            if result.get('_cache_hit'):
+                                cache_hits += 1
+                                if verbose:
+                                    click.echo(f"  💾 Cache hit: {result['test_case_name']}")
+                            else:
+                                api_calls += 1
+                                if verbose:
+                                    # Show per-call cost info in verbose mode
+                                    call_cost = result.get('_cost_info')
+                                    usage_info = result.get('_usage_info')
+                                    if call_cost and usage_info:
+                                        click.echo(f"  💰 Cost: ${call_cost.total_cost:.6f} ({usage_info.input_tokens} in, {usage_info.completion_tokens} out)")
+                            
+                            # Immediately append to CSV
+                            if self._append_to_csv(result, csv_path, verbose):
+                                processed_count += 1
+                                self._processed_files.add(json_file.name)
+                                if verbose and not result.get('_cache_hit'):
+                                    click.echo(f"  ✅ Added to CSV: {result['test_case_name']}")
+                            else:
+                                click.echo(f"  ❌ Failed to save result for {json_file.name}", err=True)
+                                self._failed_files.add(json_file.name)
+                        else:
+                            click.echo(f"  ⚠️ No result generated for {json_file.name}")
+                            self._failed_files.add(json_file.name)
+                            
+                    except Exception as e:
+                        click.echo(f"  ❌ Error processing {json_file.name}: {e}", err=True)
                         self._failed_files.add(json_file.name)
-                else:
-                    click.echo(f"  ⚠️ No result generated for {json_file.name}")
-                    self._failed_files.add(json_file.name)
-                        
-            except Exception as e:
-                click.echo(f"  ❌ Error processing {json_file.name}: {e}", err=True)
-                self._failed_files.add(json_file.name)
-                continue
+                        continue
+                    
+                    # Save progress and update log every 3 files (more frequent updates)
+                    if (completed_count % 3) == 0:
+                        self._save_progress(project_root, list(self._processed_files), list(self._failed_files))
+                        # Update log incrementally to prevent cost loss on interruption
+                        current_processed = len(self._processed_files)
+                        self._update_project_log(project_root, current_processed, total_files, len(self._failed_files), api_calls, cache_hits, incremental=True)
+                        if verbose:
+                            click.echo(f"  💾 Progress saved ({current_processed} files processed)")
+        else:
+            # Single-threaded processing (fallback for small batches or max_workers=1)
+            if verbose and self.max_workers == 1:
+                click.echo("🔧 Using single-threaded processing")
+            elif verbose:
+                click.echo(f"🔧 Only {len(json_files)} file(s), using single-threaded processing")
             
-            # Save progress and update log every 3 files (more frequent updates)
-            if (i % 3) == 0:
-                self._save_progress(project_root, list(self._processed_files), list(self._failed_files))
-                # Update log incrementally to prevent cost loss on interruption
-                current_processed = len(self._processed_files)
-                self._update_project_log(project_root, current_processed, total_files, len(self._failed_files), api_calls, cache_hits, incremental=True)
+            for i, json_file in enumerate(json_files, 1):
                 if verbose:
-                    click.echo(f"  💾 Progress saved ({current_processed} files processed)")
+                    click.echo(f"Processing ({i}/{len(json_files)}): {json_file.name}")
+                
+                try:
+                    result = self._process_single_file(json_file, reasoning_effort, verbose)
+                    if result:
+                        # Check if this was a cache hit
+                        if result.get('_cache_hit'):
+                            cache_hits += 1
+                            if verbose:
+                                click.echo(f"  💾 Cache hit: {result['test_case_name']}")
+                        else:
+                            api_calls += 1
+                            if verbose:
+                                # Show per-call cost info in verbose mode
+                                call_cost = result.get('_cost_info')
+                                usage_info = result.get('_usage_info')
+                                if call_cost and usage_info:
+                                    click.echo(f"  💰 Cost: ${call_cost.total_cost:.6f} ({usage_info.input_tokens} in, {usage_info.completion_tokens} out)")
+                        
+                        # Immediately append to CSV
+                        if self._append_to_csv(result, csv_path, verbose):
+                            processed_count += 1
+                            self._processed_files.add(json_file.name)
+                            if verbose and not result.get('_cache_hit'):
+                                click.echo(f"  ✅ Added to CSV: {result['test_case_name']}")
+                        else:
+                            click.echo(f"  ❌ Failed to save result for {json_file.name}", err=True)
+                            self._failed_files.add(json_file.name)
+                    else:
+                        click.echo(f"  ⚠️ No result generated for {json_file.name}")
+                        self._failed_files.add(json_file.name)
+                            
+                except Exception as e:
+                    click.echo(f"  ❌ Error processing {json_file.name}: {e}", err=True)
+                    self._failed_files.add(json_file.name)
+                    continue
+                
+                # Save progress and update log every 3 files (more frequent updates)
+                if (i % 3) == 0:
+                    self._save_progress(project_root, list(self._processed_files), list(self._failed_files))
+                    # Update log incrementally to prevent cost loss on interruption
+                    current_processed = len(self._processed_files)
+                    self._update_project_log(project_root, current_processed, total_files, len(self._failed_files), api_calls, cache_hits, incremental=True)
+                    if verbose:
+                        click.echo(f"  💾 Progress saved ({current_processed} files processed)")
         
         if processed_count == 0 and len(self._processed_files) == 0:
             click.echo("No results were successfully processed", err=True)
@@ -630,18 +705,21 @@ class BatchProcessor:
         """Get result from cache if available"""
         if not self.use_cache:
             return None
-        return self.cache.get(content_hash)
+        
+        with self._cache_lock:
+            return self.cache.get(content_hash)
     
     def _cache_result(self, content_hash: str, result: Dict[str, str]):
         """Cache analysis result"""
         if not self.use_cache:
             return
         
-        self.cache[content_hash] = {
-            **result,
-            'cached_at': datetime.now().isoformat()
-        }
-        self._save_cache()
+        with self._cache_lock:
+            self.cache[content_hash] = {
+                **result,
+                'cached_at': datetime.now().isoformat()
+            }
+            self._save_cache()
     
     def _rate_limit(self):
         """Apply rate limiting to API requests"""

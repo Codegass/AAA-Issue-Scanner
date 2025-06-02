@@ -127,6 +127,32 @@ your_project/
 - ✅ **Rate Limiting**: Respect API limits with configurable requests per minute
 - ✅ **Real-time Progress**: Live updates with detailed statistics
 
+### 🚀 Multi-Threading Support
+
+**Concurrent Processing:**
+- **Auto-Detection**: Automatically uses multi-threading for batches with 2+ files
+- **Configurable Workers**: Use `--max-workers` to control concurrency (default: 5)
+- **Thread-Safe**: Rate limiting, cost tracking, and CSV writing are all thread-safe
+- **Smart Fallback**: Falls back to single-threading for small batches or when `--max-workers 1`
+
+**Usage Examples:**
+```bash
+# Default: 5 concurrent workers
+python -m aaa_issue_scanner batch project_folder --verbose
+
+# Use 8 workers for faster processing
+python -m aaa_issue_scanner batch project_folder --max-workers 8 --verbose
+
+# Force single-threaded processing
+python -m aaa_issue_scanner batch project_folder --max-workers 1 --verbose
+```
+
+**Performance Benefits:**
+- 🚀 **Faster Processing**: Up to N times faster with N workers (limited by API rate limits)
+- 🔒 **Rate Limit Aware**: Respects OpenAI API rate limits even with multiple threads
+- 💾 **Thread-Safe Caching**: Multiple threads can safely share cache without conflicts
+- 📊 **Accurate Tracking**: Cost and progress tracking works correctly in multi-threaded mode
+
 **Configuration Options:**
 ```bash
 # Basic usage (caching and resume enabled by default)
